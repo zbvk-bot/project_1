@@ -19,11 +19,13 @@ python main.py serve
 
 ### Просмотр в консоли
 
+```bash
 python main.py view
 python main.py view --date-from 2024-10-10 --date-to 2024-10-12
 python main.py view --ip 192.168.1.10
 python main.py view --group-by ip
 python main.py view --group-by date
+```
 
 ## Cron
 

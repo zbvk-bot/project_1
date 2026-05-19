@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Авторизация</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="page page-c">
+  <div class="auth">
+    <div class="auth-in">
+      <section class="panel panel-sq">
+        <h2 class="pt pt-m">Авторизация</h2>
+        <form class="auth-f" method="post">
+          <div class="auth-fs">
+            <label class="auth-l">Логин <input class="inp" name="username" type="text" required></label>
+            <label class="auth-l">Пароль <input class="inp" name="password" type="password" required></label>
+          </div>
+          <div class="auth-a">
+            <button class="btn" type="submit">Войти</button>
+          </div>
+        </form>
+      </section>
+    </div>
+    {% if error %}<p class="auth-e">{{ error }}</p>{% endif %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,90 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Панель</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="page">
+  <header class="top">
+    <p class="top-u">Пользователь: {{ username }}</p>
+    <form class="top-x" method="post" action="{{ url_for('logout') }}">
+      <button class="btn btn-g" type="submit">Выйти</button>
+    </form>
+  </header>
+
+  <main class="main">
+    <section class="panel">
+      <h2 class="pt">Фильтры</h2>
+      <form class="filt" method="get" action="{{ url_for('index') }}">
+        <label class="fi">Ключевое слово
+          <input class="fc" name="keyword" type="search" value="{{ filters.keyword }}" autocomplete="off">
+        </label>
+        <label class="fi">С
+          <input class="fc fc-d" name="date_from" type="date" value="{{ filters.date_from }}">
+        </label>
+        <label class="fi">По
+          <input class="fc fc-d" name="date_to" type="date" value="{{ filters.date_to }}">
+        </label>
+        <label class="fi">IP
+          <input class="fc" name="ip" type="text" value="{{ filters.ip }}">
+        </label>
+        <label class="fi">URL
+          <select class="fc fc-s" name="url">
+            <option value="" {% if not filters.url %}selected{% endif %}>— все —</option>
+            {% for u in urls %}
+            <option value="{{ u.url_path }}" {% if filters.url == u.url_path %}selected{% endif %}>
+              {{ u.url_path }} ({{ u.hits }})
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="fi">Группировка
+          <select class="fc fc-s" name="group_by">
+            <option value="" {% if not filters.group_by %}selected{% endif %}>нет</option>
+            <option value="ip" {% if filters.group_by == 'ip' %}selected{% endif %}>по IP</option>
+            <option value="date" {% if filters.group_by == 'date' %}selected{% endif %}>по дате</option>
+          </select>
+        </label>
+        <button class="btn" type="submit" name="load" value="1">Загрузить</button>
+      </form>
+      {% if page_error %}
+      <p class="pe" role="alert">{{ page_error }}</p>
+      {% endif %}
+      {% if load_summary %}
+      <p class="load-txt">{{ load_summary }}</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2 class="pt">Данные</h2>
+      {% if not loaded %}
+      <p class="px">Нажмите «Загрузить» для получения данных.</p>
+      {% elif not table_rows %}
+      <p class="px">Нет записей по выбранным фильтрам.</p>
+      {% else %}
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              {% for _key, title in columns %}
+              <th>{{ title }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for cells in table_rows %}
+            <tr>
+              {% for cell in cells %}
+              <td>{{ cell }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

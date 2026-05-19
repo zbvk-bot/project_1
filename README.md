@@ -1,9 +1,11 @@
 ## Как запустить
 
+```bash
 pip install -r requirements.txt
 python main.py register admin
 python main.py parse
 python main.py serve
+```
 
 После `register admin` логин и пароль для входа — `admin` / `admin`.
 

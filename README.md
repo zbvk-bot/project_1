@@ -31,5 +31,7 @@ python main.py view --group-by date
 
 ## Cron
 
+```bash
 python main.py cron
+```
 

@@ -19,7 +19,7 @@ python main.py serve
 - `serve` — веб-интерфейс
 - `cron` — то же, что `parse`, удобно повесить на расписание
 
-### Просмотр в консоли
+## Просмотр в консоли
 
 ```bash
 python main.py view

@@ -1,37 +1,31 @@
-# Агрегатор access-логов
+## Как запустить
 
-При первом запуске автоматически создаются `config.ini`, каталог с примерами логов и база данных PostgreSQL (если служба доступна).
-
-## Требования
-
-- Python 3.10+
-- PostgreSQL на `localhost:5432` (логин/пароль — в `config.ini`, по умолчанию `postgres` / `postgres`)
-
-## Запуск
-
-```bash
 pip install -r requirements.txt
 python main.py register admin
 python main.py parse
 python main.py serve
-```
 
-Откройте в браузере: http://127.0.0.1:8080/ (логин `admin`, пароль `admin`).
+После `register admin` логин и пароль для входа — `admin` / `admin`.
+
+Сайт: http://127.0.0.1:8080/
 
 ## Команды
 
-| Команда | Описание |
-|---------|----------|
-| `register [имя]` | Создать пользователя |
-| `parse` | Разобрать логи и сохранить в БД |
-| `cron` | То же, что `parse` (для cron) |
-| `view` | Просмотр в консоли (`--date-from`, `--date-to`, `--ip`, `--url`, `--keyword`, `--group-by`) |
-| `serve` | Веб-интерфейс |
+- `register [имя]` — добавить пользователя в БД
+- `parse` — разобрать логи и записать в базу
+- `view` — посмотреть данные в терминале (фильтры ниже)
+- `serve` — веб-интерфейс
+- `cron` — то же, что `parse`, удобно повесить на расписание
 
-Свой файл настроек: `python main.py -c путь\к\config.ini <команда>`.
+### Просмотр в консоли
+
+python main.py view
+python main.py view --date-from 2024-10-10 --date-to 2024-10-12
+python main.py view --ip 192.168.1.10
+python main.py view --group-by ip
+python main.py view --group-by date
 
 ## Cron
 
-```bash
 python main.py cron
-```
+

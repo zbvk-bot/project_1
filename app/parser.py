@@ -129,10 +129,11 @@ def parse_file_incremental(
     path: Path,
     chunk_size: int = 65536,
     batch_size: int = 500,
-) -> Generator[tuple[list[dict], ParseResult], None, None]:
+) -> Generator[tuple[list[dict], ParseResult, int, int], None, None]:
     if not path.is_file():
         raise AppError(f"Файл не найден: {path}", "PARSE_ERROR")
 
+    total_bytes = path.stat().st_size
     lines_read = 0
     errors: list[str] = []
     batch: list[dict] = []
@@ -144,6 +145,7 @@ def parse_file_incremental(
             if not data:
                 break
             partial += data
+            bytes_read = fh.tell()
             while "\n" in partial:
                 line, partial = partial.split("\n", 1)
                 lines_read += 1
@@ -155,7 +157,7 @@ def parse_file_incremental(
                 if parsed:
                     batch.append(parsed_to_row(parsed))
                 if len(batch) >= batch_size:
-                    yield batch, ParseResult(errors.copy())
+                    yield batch, ParseResult(errors.copy()), bytes_read, total_bytes
                     batch = []
         if partial.strip():
             lines_read += 1
@@ -165,8 +167,9 @@ def parse_file_incremental(
                     batch.append(parsed_to_row(parsed))
             except AppError as exc:
                 errors.append(f"Строка {lines_read}: {exc.message}")
+        bytes_read = fh.tell()
 
     if batch:
-        yield batch, ParseResult(errors)
+        yield batch, ParseResult(errors), bytes_read, total_bytes
     elif lines_read == 0:
-        yield [], ParseResult(errors)
+        yield [], ParseResult(errors), 0, total_bytes

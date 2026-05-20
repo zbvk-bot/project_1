@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import json
 from functools import wraps
+from pathlib import Path
+
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask_sock import Sock
 
 from . import auth
 from .config import AppConfig, parse_datetime
 from .db import connect, list_distinct_urls, query_logs
-from .errors import AppError, AuthError, parse_limit
+from .errors import AppError, AuthError, ValidationError, parse_limit
+from .log_service import run_parse_file
+from .upload_service import get_file_detail, list_uploaded_files, matches_log_mask, save_upload
 
 FILTER_KEYS = ("keyword", "date_from", "date_to", "ip", "url", "group_by")
+sock = Sock()
 
 
 def _filters_from_request() -> dict[str, str]:
@@ -43,19 +50,17 @@ def _table_columns(group_by: str) -> list[tuple[str, str]]:
     ]
 
 
-def _format_cell(row: dict, key: str) -> str:
-    value = row.get(key)
-    if value is None:
-        return "—"
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return str(value)
+def _require_api_user() -> None:
+    if not session.get("user_id"):
+        raise AuthError()
 
 
 def create_app(cfg: AppConfig) -> Flask:
     app = Flask(__name__, template_folder=str(cfg.templates_dir), static_folder=str(cfg.static_dir))
     app.secret_key = cfg.flask_secret
     app.config["CFG"] = cfg
+    app.config["MAX_CONTENT_LENGTH"] = cfg.upload_max_bytes
+    sock.init_app(app)
 
     def login_required(view):
         @wraps(view)
@@ -68,7 +73,7 @@ def create_app(cfg: AppConfig) -> Flask:
 
     @app.errorhandler(AppError)
     def handle_app_error(exc: AppError):
-        if request.path.startswith("/api/"):
+        if request.path.startswith("/api/") or request.path.startswith("/ws/"):
             status = 401 if exc.code == "AUTH_REQUIRED" else 400
             return jsonify(exc.to_dict()), status
         if session.get("user_id"):
@@ -95,6 +100,20 @@ def create_app(cfg: AppConfig) -> Flask:
         if session.get("user_id"):
             return render_template("error.html", message="Внутренняя ошибка сервера"), 500
         return render_template("login.html", error="Внутренняя ошибка сервера"), 500
+
+    @app.errorhandler(413)
+    def handle_too_large(_exc):
+        if request.path.startswith("/api/"):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Файл слишком большой",
+                    },
+                }
+            ), 413
+        return render_template("error.html", message="Файл слишком большой"), 413
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -123,59 +142,37 @@ def create_app(cfg: AppConfig) -> Flask:
     @app.route("/")
     @login_required
     def index():
-        filters = _filters_from_request()
-        loaded = request.args.get("load") == "1"
-        urls: list[dict] = []
-        records: list[dict] = []
-        page_error: str | None = None
-        group_by = filters.get("group_by", "")
-
-        if loaded:
-            cfg = app.config["CFG"]
-            try:
-                with connect(cfg) as conn:
-                    urls = list_distinct_urls(
-                        conn,
-                        keyword=filters["keyword"] or None,
-                        date_from=parse_datetime(filters["date_from"]),
-                        date_to=parse_datetime(filters["date_to"], end_of_day=True),
-                    )
-                    records = query_logs(
-                        conn,
-                        date_from=parse_datetime(filters["date_from"]),
-                        date_to=parse_datetime(filters["date_to"], end_of_day=True),
-                        remote_ip=filters["ip"] or None,
-                        keyword=filters["keyword"] or None,
-                        url_path=filters["url"] or None,
-                        group_by=group_by or None,
-                        limit=200,
-                    )
-            except AppError as exc:
-                page_error = exc.message
-                loaded = False
-
-        columns = _table_columns(group_by)
-        table_rows = [
-            [_format_cell(row, key) for key, _ in columns]
-            for row in records
-        ]
-
+        cfg = app.config["CFG"]
         return render_template(
             "dashboard.html",
             username=session.get("username", ""),
-            filters=filters,
-            loaded=loaded,
-            urls=urls,
-            columns=columns,
-            table_rows=table_rows,
-            page_error=page_error,
-            load_summary=f"Загружено записей: {len(records)}" if loaded and not page_error else None,
+            file_mask=cfg.logs_file_mask,
+            max_upload_human=_format_bytes(cfg.upload_max_bytes),
         )
+
+    @app.route("/api/files", methods=["GET"])
+    def api_files():
+        _require_api_user()
+        cfg = app.config["CFG"]
+        return jsonify({"ok": True, "data": list_uploaded_files(cfg)})
+
+    @app.route("/api/files/<path:name>", methods=["GET"])
+    def api_file_detail(name: str):
+        _require_api_user()
+        cfg = app.config["CFG"]
+        return jsonify({"ok": True, "data": get_file_detail(cfg, name)})
+
+    @app.route("/api/upload", methods=["POST"])
+    def api_upload():
+        _require_api_user()
+        cfg = app.config["CFG"]
+        uploaded = request.files.get("file")
+        meta = save_upload(cfg, uploaded)
+        return jsonify({"ok": True, "data": meta})
 
     @app.route("/api/urls")
     def api_urls():
-        if not session.get("user_id"):
-            raise AuthError()
+        _require_api_user()
         cfg = app.config["CFG"]
         with connect(cfg) as conn:
             rows = list_distinct_urls(
@@ -188,8 +185,7 @@ def create_app(cfg: AppConfig) -> Flask:
 
     @app.route("/api/logs")
     def api_logs():
-        if not session.get("user_id"):
-            raise AuthError()
+        _require_api_user()
         cfg = app.config["CFG"]
         with connect(cfg) as conn:
             rows = query_logs(
@@ -202,6 +198,88 @@ def create_app(cfg: AppConfig) -> Flask:
                 group_by=request.args.get("group_by") or None,
                 limit=parse_limit(request.args.get("limit")),
             )
-        return jsonify({"ok": True, "data": _rows_to_json(rows)})
+        group_by = request.args.get("group_by") or ""
+        return jsonify(
+            {
+                "ok": True,
+                "data": _rows_to_json(rows),
+                "columns": _table_columns(group_by),
+            }
+        )
+
+    @sock.route("/ws/parse")
+    def ws_parse(ws):
+        if not session.get("user_id"):
+            ws.send(json.dumps({"type": "error", "message": "Требуется вход"}))
+            return
+        cfg = app.config["CFG"]
+        try:
+            raw = ws.receive(timeout=30)
+        except TypeError:
+            raw = ws.receive()
+        if not raw:
+            return
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            ws.send(json.dumps({"type": "error", "message": "Неверный JSON"}))
+            return
+        filename = (payload.get("file") or "").strip()
+        if not filename:
+            ws.send(json.dumps({"type": "error", "message": "Не указан файл"}))
+            return
+        if not matches_log_mask(cfg, filename):
+            ws.send(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": f"Файл должен соответствовать маске «{cfg.logs_file_mask}»",
+                    }
+                )
+            )
+            return
+        path = (cfg.logs_directory / Path(filename).name).resolve()
+        if path.parent != cfg.logs_directory.resolve() or not path.is_file():
+            ws.send(json.dumps({"type": "error", "message": "Файл не найден"}))
+            return
+
+        def on_progress(bytes_read: int, total_bytes: int, inserted: int) -> None:
+            pct = round(100 * bytes_read / total_bytes) if total_bytes else 100
+            ws.send(
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "bytes_read": bytes_read,
+                        "total_bytes": total_bytes,
+                        "percent": pct,
+                        "inserted": inserted,
+                    }
+                )
+            )
+
+        try:
+            report = run_parse_file(cfg, path, on_progress=on_progress)
+        except AppError as exc:
+            ws.send(json.dumps({"type": "error", "message": exc.message}))
+            return
+        ws.send(
+            json.dumps(
+                {
+                    "type": "done",
+                    "filename": report.filename,
+                    "inserted": report.total_inserted,
+                    "errors": report.errors[:20],
+                    "error_count": len(report.errors),
+                }
+            )
+        )
 
     return app
+
+
+def _format_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"

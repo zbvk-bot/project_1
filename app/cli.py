@@ -77,7 +77,7 @@ def cmd_serve(cfg: AppConfig) -> None:
     flask_app = create_app(cfg)
     for url in cfg.server_urls():
         print(f"Откройте в браузере: {url}/")
-    flask_app.run(host=cfg.server_host, port=cfg.server_port, debug=False)
+    flask_app.run(host=cfg.server_host, port=cfg.server_port, debug=False, threaded=True)
 
 
 def main(argv: list[str] | None = None) -> int:

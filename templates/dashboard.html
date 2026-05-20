@@ -15,76 +15,90 @@
 
   <main class="main">
     <section class="panel">
-      <h2 class="pt">Фильтры</h2>
-      <form class="filt" method="get" action="{{ url_for('index') }}">
+      <h2 class="pt">Загрузка логов <span class="badge">XHR + WebSocket</span></h2>
+      <p class="px">Маска файлов: <code>{{ file_mask }}</code>, максимум {{ max_upload_human }}.</p>
+      <form id="upload-form" class="filt">
+        <label class="fi">Файл access-лога
+          <input class="fc" id="upload-input" type="file" accept=".log,text/plain" required>
+        </label>
+        <button class="btn" id="upload-btn" type="submit">Загрузить на сервер</button>
+      </form>
+      <div id="upload-progress" class="load-panel hidden" aria-live="polite">
+        <div class="load-bar-wrap">
+          <div id="upload-bar" class="load-bar" style="width: 0%"></div>
+        </div>
+        <p id="upload-status" class="load-txt"></p>
+      </div>
+      <div id="parse-progress" class="load-panel hidden" aria-live="polite">
+        <div class="load-bar-wrap">
+          <div id="parse-bar" class="load-bar" style="width: 0%"></div>
+        </div>
+        <p id="parse-status" class="load-txt"></p>
+      </div>
+      <p id="upload-error" class="pe hidden" role="alert"></p>
+    </section>
+
+    <div class="grid-2">
+      <section class="panel">
+        <h2 class="pt">Загруженные файлы <span class="badge">Fetch</span></h2>
+        <ul id="file-list" class="file-list">
+          <li class="px">Загрузка списка…</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2 class="pt">Выбранный файл <span class="badge">Fetch</span></h2>
+        <p id="file-detail-empty" class="px">Выберите файл в списке слева.</p>
+        <dl id="file-detail" class="detail hidden"></dl>
+        <pre id="file-preview" class="file-preview hidden"></pre>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2 class="pt">Фильтры и данные <span class="badge">Fetch</span></h2>
+      <form id="filter-form" class="filt">
         <label class="fi">Ключевое слово
-          <input class="fc" name="keyword" type="search" value="{{ filters.keyword }}" autocomplete="off">
+          <input class="fc" name="keyword" type="search" autocomplete="off">
         </label>
         <label class="fi">С
-          <input class="fc fc-d" name="date_from" type="date" value="{{ filters.date_from }}">
+          <input class="fc fc-d" name="date_from" type="date">
         </label>
         <label class="fi">По
-          <input class="fc fc-d" name="date_to" type="date" value="{{ filters.date_to }}">
+          <input class="fc fc-d" name="date_to" type="date">
         </label>
         <label class="fi">IP
-          <input class="fc" name="ip" type="text" value="{{ filters.ip }}">
+          <input class="fc" name="ip" type="text">
         </label>
         <label class="fi">URL
-          <select class="fc fc-s" name="url">
-            <option value="" {% if not filters.url %}selected{% endif %}>— все —</option>
-            {% for u in urls %}
-            <option value="{{ u.url_path }}" {% if filters.url == u.url_path %}selected{% endif %}>
-              {{ u.url_path }} ({{ u.hits }})
-            </option>
-            {% endfor %}
+          <select class="fc fc-s" name="url" id="url-select">
+            <option value="">— все —</option>
           </select>
         </label>
         <label class="fi">Группировка
           <select class="fc fc-s" name="group_by">
-            <option value="" {% if not filters.group_by %}selected{% endif %}>нет</option>
-            <option value="ip" {% if filters.group_by == 'ip' %}selected{% endif %}>по IP</option>
-            <option value="date" {% if filters.group_by == 'date' %}selected{% endif %}>по дате</option>
+            <option value="">нет</option>
+            <option value="ip">по IP</option>
+            <option value="date">по дате</option>
           </select>
         </label>
-        <button class="btn" type="submit" name="load" value="1">Загрузить</button>
+        <button class="btn" type="submit">Загрузить данные</button>
       </form>
-      {% if page_error %}
-      <p class="pe" role="alert">{{ page_error }}</p>
-      {% endif %}
-      {% if load_summary %}
-      <p class="load-txt">{{ load_summary }}</p>
-      {% endif %}
+      <p id="data-summary" class="load-txt hidden"></p>
+      <p id="data-error" class="pe hidden" role="alert"></p>
     </section>
 
     <section class="panel">
-      <h2 class="pt">Данные</h2>
-      {% if not loaded %}
-      <p class="px">Нажмите «Загрузить» для получения данных.</p>
-      {% elif not table_rows %}
-      <p class="px">Нет записей по выбранным фильтрам.</p>
-      {% else %}
-      <div class="data-table-wrap">
+      <h2 class="pt">Таблица записей</h2>
+      <p id="data-empty" class="px">Задайте фильтры и нажмите «Загрузить данные».</p>
+      <div id="data-table-wrap" class="data-table-wrap hidden">
         <table class="data-table">
-          <thead>
-            <tr>
-              {% for _key, title in columns %}
-              <th>{{ title }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for cells in table_rows %}
-            <tr>
-              {% for cell in cells %}
-              <td>{{ cell }}</td>
-              {% endfor %}
-            </tr>
-            {% endfor %}
-          </tbody>
+          <thead id="data-thead"></thead>
+          <tbody id="data-tbody"></tbody>
         </table>
       </div>
-      {% endif %}
     </section>
   </main>
+
+  <script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>
 </body>
 </html>

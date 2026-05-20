@@ -30,6 +30,10 @@ secret_key = {secret}
 directory = data/sample_logs
 file_mask = access*.log
 read_chunk = 65536
+
+[upload]
+max_bytes = 52428800
+preview_lines = 80
 """
 
 
@@ -107,6 +111,9 @@ class AppConfig:
         self.logs_directory = (base / logs_dir).resolve()
         self.logs_file_mask = _get(p, "logs", "file_mask", "access*.log")
         self.logs_read_chunk = _getint(p, "logs", "read_chunk", 65536)
+
+        self.upload_max_bytes = _getint(p, "upload", "max_bytes", 52_428_800)
+        self.upload_preview_lines = _getint(p, "upload", "preview_lines", 80)
 
         self.templates_dir = (base / "templates").resolve()
         self.static_dir = (base / "static").resolve()
